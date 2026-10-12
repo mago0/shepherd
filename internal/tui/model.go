@@ -238,6 +238,7 @@ type model struct {
 	noteEditing   bool           // a change was captured this note session (one undo snapshot)
 	w             int
 	height        int
+	labelCol      int           // widest row label in the list being rendered; set by listView
 	past          [][]todo.Item // undo stack (snapshots before each mutation)
 	future        [][]todo.Item // redo stack (snapshots undone)
 	dirty         bool          // cached: board differs from disk; recomputed per event

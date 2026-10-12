@@ -1489,3 +1489,33 @@ func TestFooterToggle(t *testing.T) {
 		t.Fatal("F should toggle the help grid back on")
 	}
 }
+
+// TestRowWraps checks long text wraps under itself instead of running into the
+// flush-right labels, and that every row wraps at the same right edge.
+func TestRowWraps(t *testing.T) {
+	long := "Resize Aurora writer to r6i.8xlarge by hand, reader first, then failover, then the old writer"
+	m := model{input: textinput.New(), note: textarea.New(), w: 60, height: 40,
+		items: []todo.Item{{Text: "season scale-up", Prio: 'H', Category: "tw", Subs: []todo.Item{
+			{Text: long},
+			{Text: "Schedule load test", Prio: 'M'},
+		}}}}
+	out := ansi.Strip(m.listView())
+	for _, l := range strings.Split(out, "\n") {
+		if lipgloss.Width(l) > m.width() {
+			t.Fatalf("line wider than the pane (%d > %d): %q\n%s", lipgloss.Width(l), m.width(), l, out)
+		}
+	}
+	if strings.Contains(out, long) {
+		t.Fatalf("long text should wrap:\n%s", out)
+	}
+	if got := strings.Join(strings.Fields(out), " "); !strings.Contains(got, long) {
+		t.Fatalf("wrapping dropped text:\n%s", out)
+	}
+	// continuation lines sit under the text, clear of the label column ("0/2  high")
+	col := m.width() - len("0/2  high") - 2
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "failover") && lipgloss.Width(strings.TrimRight(l, " ")) > col {
+			t.Fatalf("wrapped line runs into the label column: %q", l)
+		}
+	}
+}

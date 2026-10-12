@@ -194,34 +194,10 @@ func (m model) rowComplement(it todo.Item) string {
 	return ""
 }
 
-// rowContent renders one item's row at the given indent: the box (its shape the
-// status — ○ open, ◐ named status, ✓ done), the text, then up to two flush-right
-// values — the subtask progress or due/defer label, and the complement axis
-// (see rowComplement) pinned far right. badge is the item's subtask progress, or
-// "". Cursor highlight is applied by the caller.
-func (m model) rowContent(it todo.Item, indent, badge string, isSub bool) string {
-	w := m.width()
-	box := "○"
-	boxSt := boxStyle
-	text := it.Text
-	deferred := todo.Deferred(it)
-	if it.Done {
-		box = "✓"
-		text = doneStyle.Render(text)
-	} else if it.Status != "" {
-		box = "◐"
-		boxSt = progStyle
-	} else if deferred {
-		text = dimStyle.Render(text) // not started yet
-	}
-	if m.global && m.view != viewBoard && it.Source != "" {
-		text += " " + dimStyle.Render("["+it.Source+"]")
-	}
-	// In the tag view the group header names the grouping tag; show the item's
-	// other tags after the text so a multi-tag item isn't misread as single-tag.
-	if m.view == viewTag && len(it.Tags) > 1 {
-		text += " " + dimStyle.Render("#"+strings.Join(it.Tags[1:], " #"))
-	}
+// rowLabel is a row's flush-right text: the subtask progress or due/defer label,
+// then the complement axis (see rowComplement) pinned far right. badge is the
+// item's subtask progress, or "".
+func (m model) rowLabel(it todo.Item, badge string, isSub bool) string {
 	// Progress/due slot: one value, so the column lines up row to row — subtask
 	// progress when the item has subtasks, else the due/defer label. Nothing
 	// urgent hides behind a badge: overdue parents are pinned to the ⚠ overdue group.
@@ -229,7 +205,7 @@ func (m model) rowContent(it todo.Item, indent, badge string, isSub bool) string
 	switch {
 	case badge != "":
 		label = countStyle.Render(badge)
-	case deferred:
+	case todo.Deferred(it):
 		if lbl := todo.DeferLabel(it.Defer); lbl != "" {
 			label = dimStyle.Render(lbl)
 		}
@@ -249,8 +225,86 @@ func (m model) rowContent(it todo.Item, indent, badge string, isSub bool) string
 		}
 		label += c
 	}
-	left := fmt.Sprintf("%s%s %s", indent, boxSt.Render(box), text)
-	return spread(w, left, label)
+	return label
+}
+
+// rowBadge is a parent row's subtask progress ("1/2"), or "" for a subtask row
+// or a parent without subtasks.
+func (m model) rowBadge(r rowRef) string {
+	if r.sub != -1 {
+		return ""
+	}
+	if d, t := todo.SubCount(m.rowItem(r)); t > 0 {
+		return fmt.Sprintf("%d/%d", d, t)
+	}
+	return ""
+}
+
+// labelColumn is the widest rowLabel across the list, so every row wraps its
+// text at the same right edge.
+func (m model) labelColumn() int {
+	col := 0
+	for _, r := range m.rows() {
+		col = max(col, lipgloss.Width(m.rowLabel(m.rowItem(r), m.rowBadge(r), r.sub >= 0)))
+	}
+	return col
+}
+
+// rowContent renders one item's row at the given indent: the box (its shape the
+// status — ○ open, ◐ named status, ✓ done), the text, then the flush-right
+// rowLabel. Text that does not fit left of the label column wraps onto
+// continuation lines aligned under the first, so the result may hold several
+// newline-separated lines. Cursor highlight is applied by the caller.
+func (m model) rowContent(it todo.Item, indent, badge string, isSub bool) string {
+	w := m.width()
+	box := "○"
+	boxSt := boxStyle
+	textSt := lipgloss.NewStyle()
+	if it.Done {
+		box = "✓"
+		textSt = doneStyle
+	} else if it.Status != "" {
+		box = "◐"
+		boxSt = progStyle
+	} else if todo.Deferred(it) {
+		textSt = dimStyle // not started yet
+	}
+	var suffix []string
+	if m.global && m.view != viewBoard && it.Source != "" {
+		suffix = append(suffix, "["+it.Source+"]")
+	}
+	// In the tag view the group header names the grouping tag; show the item's
+	// other tags after the text so a multi-tag item isn't misread as single-tag.
+	if m.view == viewTag && len(it.Tags) > 1 {
+		suffix = append(suffix, "#"+strings.Join(it.Tags[1:], " #"))
+	}
+	label := m.rowLabel(it, badge, isSub)
+	lead := indent + boxSt.Render(box) + " "
+	avail := w - lipgloss.Width(lead)
+	if col := max(m.labelCol, lipgloss.Width(label)); col > 0 {
+		avail -= col + 2
+	}
+	if avail < 10 {
+		avail = 10
+	}
+	lines := strings.Split(ansi.Wrap(it.Text, avail, ""), "\n")
+	for i, l := range lines {
+		lines[i] = textSt.Render(strings.TrimRight(l, " "))
+	}
+	if len(suffix) > 0 {
+		s := dimStyle.Render(strings.Join(suffix, " "))
+		if last := len(lines) - 1; lipgloss.Width(lines[last])+1+lipgloss.Width(s) <= avail {
+			lines[last] += " " + s
+		} else {
+			lines = append(lines, s)
+		}
+	}
+	pad := strings.Repeat(" ", lipgloss.Width(lead))
+	rows := []string{spread(w, lead+lines[0], label)}
+	for _, l := range lines[1:] {
+		rows = append(rows, pad+l)
+	}
+	return strings.Join(rows, "\n")
 }
 
 func (m model) listView() string {
@@ -266,10 +320,11 @@ func (m model) listView() string {
 		}
 	}
 	lastGroup := "\x00" // sentinel so the first group always prints a header
+	m.labelCol = m.labelColumn()
 	for pos, r := range m.rows() {
 		it := m.rowItem(r)
-		indent, badge := "   ", ""
-		if r.sub == -1 { // parent row: group header + subtask progress badge
+		indent, badge := "   ", m.rowBadge(r)
+		if r.sub == -1 { // parent row: group header
 			parent := m.items[r.item]
 			if gid, label := m.groupOf(parent); gid != lastGroup {
 				if lastGroup != "\x00" {
@@ -280,20 +335,19 @@ func (m model) listView() string {
 				out = append(out, spread(w, catStyle.Render(label), cnt))
 				lastGroup = gid
 			}
-			if d, t := todo.SubCount(it); t > 0 {
-				badge = fmt.Sprintf("%d/%d", d, t)
-			}
 		} else {
 			indent = "     " // subtasks indent one level under their parent
 		}
-		row := m.rowContent(it, indent, badge, r.sub >= 0)
+		row := strings.Split(m.rowContent(it, indent, badge, r.sub >= 0), "\n")
 		if pos == m.cursor {
 			cursorLine = len(out)
 			// full-width subtle highlight on the selected row; strip inner styles
 			// first so their ANSI resets don't punch holes in the background.
-			row = cursorStyle.Width(w).Render(ansi.Strip(row))
+			for i, l := range row {
+				row[i] = cursorStyle.Width(w).Render(ansi.Strip(l))
+			}
 		}
-		out = append(out, row)
+		out = append(out, row...)
 		if m.density == comfort {
 			out = append(out, "") // roomier rows
 		}
