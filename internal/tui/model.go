@@ -281,11 +281,11 @@ func (m model) currentConfig() config {
 func (m *model) resort() {
 	switch m.view {
 	case viewBoard:
-		todo.SortBySource(m.items)
+		todo.SortBySource(m.items, m.statuses)
 	case viewTag:
-		todo.SortByTag(m.items)
+		todo.SortByTag(m.items, m.statuses)
 	default:
-		todo.Sort(m.items, m.view == viewPriority)
+		todo.Sort(m.items, m.view == viewPriority, m.statuses)
 	}
 }
 

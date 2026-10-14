@@ -13,7 +13,7 @@ func pinToday(t *testing.T, iso string) {
 
 func TestSortStable(t *testing.T) {
 	items := []Item{{Text: "a"}, {Prio: 'L', Text: "b"}, {Prio: 'H', Text: "c"}, {Prio: 'H', Text: "d"}}
-	Sort(items, false)
+	Sort(items, false, nil)
 	got := ""
 	for _, it := range items {
 		got += it.Text
@@ -31,7 +31,7 @@ func TestSortByCategoryThenPrio(t *testing.T) {
 		{Text: "u1"}, // uncategorized -> last
 		{Text: "b2", Category: "beta", Prio: 'M'},
 	}
-	Sort(items, false)
+	Sort(items, false, nil)
 	got := ""
 	for _, it := range items {
 		got += it.Text + " "
@@ -47,7 +47,7 @@ func TestSortBySource(t *testing.T) {
 		{Text: "a1", Source: "api"},
 		{Text: "w1", Source: "web", Category: "a"},
 	}
-	SortBySource(items)
+	SortBySource(items, nil)
 	got := ""
 	for _, it := range items {
 		got += it.Text + " "
@@ -112,12 +112,56 @@ func TestQuickAddDeferLink(t *testing.T) {
 	}
 }
 
+func TestSortByStatus(t *testing.T) {
+	statuses := []string{"open", "in-progress", "blocked", "done"}
+	fresh := func() []Item {
+		return []Item{
+			{Text: "done", Prio: 'H', Done: true},
+			{Text: "blocked", Prio: 'M', Status: "blocked"},
+			{Text: "open-none"},
+			{Text: "waiting", Prio: 'H', Status: "waiting"}, // not configured
+			{Text: "progress", Prio: 'L', Status: "in-progress"},
+			{Text: "open-high", Prio: 'H'},
+		}
+	}
+	texts := func(items []Item) string {
+		got := ""
+		for _, it := range items {
+			got += it.Text + " "
+		}
+		return got
+	}
+
+	// category view: status in configured order before priority, unconfigured
+	// statuses just before done
+	items := fresh()
+	Sort(items, false, statuses)
+	if got := texts(items); got != "open-high open-none progress blocked waiting done " {
+		t.Fatalf("status order wrong: %q", got)
+	}
+
+	// priority view: priority stays the grouping key, status orders within it
+	items = fresh()
+	Sort(items, true, statuses)
+	if got := texts(items); got != "open-high waiting done blocked progress open-none " {
+		t.Fatalf("priority-view status order wrong: %q", got)
+	}
+
+	// overdue stays pinned above the status order
+	pinToday(t, "2026-07-10")
+	items = []Item{{Text: "open"}, {Text: "late", Status: "blocked", Due: "2026-07-01"}}
+	Sort(items, false, statuses)
+	if items[0].Text != "late" {
+		t.Fatalf("overdue should stay pinned first: %q", texts(items))
+	}
+}
+
 func TestSortByPriorityView(t *testing.T) {
 	items := []Item{
 		{Text: "a", Category: "z", Prio: 'L'},
 		{Text: "b", Category: "a", Prio: 'H'},
 	}
-	Sort(items, true) // priority first: H before L regardless of category
+	Sort(items, true, nil) // priority first: H before L regardless of category
 	if items[0].Text != "b" {
 		t.Fatalf("priority-view sort wrong: %+v", items)
 	}
@@ -129,7 +173,7 @@ func TestDueSort(t *testing.T) {
 		{Text: "none"},
 		{Text: "soon", Due: "2026-07-11"},
 	}
-	Sort(items, false) // same cat+prio: soonest due first, no-due last
+	Sort(items, false, nil) // same cat+prio: soonest due first, no-due last
 	if got := items[0].Text + items[1].Text + items[2].Text; got != "soonlatenone" {
 		t.Fatalf("due sort wrong: %q", got)
 	}
@@ -142,7 +186,7 @@ func TestOverduePinSort(t *testing.T) {
 		{Text: "late", Category: "home", Due: "2026-07-01"}, // overdue
 		{Text: "plain", Category: "work"},
 	}
-	Sort(items, false)
+	Sort(items, false, nil)
 	if items[0].Text != "late" {
 		t.Fatalf("overdue not pinned first: %+v", items)
 	}
@@ -327,7 +371,7 @@ func TestSortByTag(t *testing.T) {
 		{Text: "a2", Tags: []string{"api", "docs"}, Prio: 'H'},
 		{Text: "a1", Tags: []string{"api"}, Prio: 'L'},
 	}
-	SortByTag(items)
+	SortByTag(items, nil)
 	got := ""
 	for _, it := range items {
 		got += it.Text + " "

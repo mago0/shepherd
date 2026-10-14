@@ -127,8 +127,8 @@ priority, `due:<preset>` the due date, `defer:<preset>` a start/defer date,
 (holds spaces, takes the rest of the line — put it last); everything else is the
 task text.
 
-Items are ordered by **category, then priority, then soonest due**, grouped
-under headers. **Overdue** open
+Items are ordered by **category, then status (in `statuses` order), then
+priority, then soonest due**, grouped under headers. **Overdue** open
 items are pinned to a `⚠ overdue` group at the top. New items get a `created`
 timestamp; due items show a relative label
 (`due 3d`, `overdue 2d` in red). Edits save on quit, autosave after a short
