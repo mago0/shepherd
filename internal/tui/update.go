@@ -281,27 +281,74 @@ func (m *model) place(target todo.Item) {
 	}
 }
 
-// placeSub is place's subtask counterpart: follows the cursor onto a
-// subtask's row after its status changes. Matched by (idx, sub) rather than
-// by value — subtask text isn't guaranteed unique the way place's sameItem
-// check assumes.
-func (m *model) placeSub(idx, sub int) {
-	if m.view != viewLane {
-		return
-	}
-	lane := todo.StatusOf(m.items[idx].Subs[sub], m.statuses)
-	for i, s := range m.statuses {
-		if s == lane {
-			m.lane = i
+// follow re-places the cursor on one row after a resort: the parent item with
+// the given id, or its subtask with subID when that is set. In viewLane it
+// first switches to the row's own lane, so a card stays under the cursor in its
+// new column.
+func (m *model) follow(id, subID string) {
+	idx, sub := -1, -1
+	for i := range m.items {
+		if m.items[i].ID == id {
+			idx = i
 			break
 		}
 	}
-	for p, r := range m.laneRows(lane) {
+	if idx < 0 {
+		return
+	}
+	if subID != "" {
+		for j := range m.items[idx].Subs {
+			if m.items[idx].Subs[j].ID == subID {
+				sub = j
+				break
+			}
+		}
+		if sub < 0 {
+			return
+		}
+	}
+	rows := m.rows()
+	if m.view == viewLane {
+		target := m.items[idx]
+		if sub >= 0 {
+			target = m.items[idx].Subs[sub]
+		}
+		lane := todo.StatusOf(target, m.statuses)
+		for i, s := range m.statuses {
+			if s == lane {
+				m.lane = i
+				break
+			}
+		}
+		rows = m.laneRows(lane)
+	}
+	for p, r := range rows {
 		if r.item == idx && r.sub == sub {
 			m.cursor = p
 			return
 		}
 	}
+}
+
+// statusChanged re-sorts after the status of row ref changed, since status is
+// a sort key, and keeps the cursor on that row. A row not saved yet gets its id
+// here, because follow tracks rows by id.
+func (m *model) statusChanged(ref rowRef) {
+	it := &m.items[ref.item]
+	if it.ID == "" {
+		it.ID = todo.NewID()
+	}
+	subID := ""
+	if ref.sub >= 0 {
+		sub := &it.Subs[ref.sub]
+		if sub.ID == "" {
+			sub.ID = todo.NewID()
+		}
+		subID = sub.ID
+	}
+	id := it.ID
+	m.resort()
+	m.follow(id, subID)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -513,13 +560,10 @@ func (m model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.beforeMutate()
 			if ref.sub == -1 {
 				todo.SetParentDone(&m.items[idx], !m.items[idx].Done)
-				if m.view == viewLane { // follow the card into its new column
-					m.place(m.items[idx])
-				}
 			} else {
 				todo.SetSubDone(&m.items[idx], ref.sub, !m.items[idx].Subs[ref.sub].Done)
-				m.placeSub(idx, ref.sub)
 			}
+			m.statusChanged(ref)
 			m.clamp()
 		}
 	case "tab":
@@ -527,13 +571,10 @@ func (m model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.beforeMutate()
 			if ref.sub == -1 {
 				todo.CycleStatus(&m.items[idx], m.statuses)
-				if m.view == viewLane { // follow the card into its new column
-					m.place(m.items[idx])
-				}
 			} else {
 				todo.CycleSubStatus(&m.items[idx], ref.sub, m.statuses)
-				m.placeSub(idx, ref.sub)
 			}
+			m.statusChanged(ref)
 			m.clamp()
 		}
 	case "d":

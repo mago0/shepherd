@@ -147,6 +147,17 @@ func TestSortByStatus(t *testing.T) {
 		t.Fatalf("priority-view status order wrong: %q", got)
 	}
 
+	// subtasks follow the same status order inside their parent
+	items = []Item{{Text: "parent", Subs: []Item{
+		{Text: "done", Done: true},
+		{Text: "blocked", Status: "blocked"},
+		{Text: "open"},
+	}}}
+	Sort(items, false, statuses)
+	if got := texts(items[0].Subs); got != "open blocked done " {
+		t.Fatalf("subtask status order wrong: %q", got)
+	}
+
 	// overdue stays pinned above the status order
 	pinToday(t, "2026-07-10")
 	items = []Item{{Text: "open"}, {Text: "late", Status: "blocked", Due: "2026-07-01"}}
