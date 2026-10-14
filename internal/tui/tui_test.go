@@ -411,7 +411,7 @@ func TestSetCategory(t *testing.T) {
 	m := model{input: textinput.New(), items: []todo.Item{
 		{Text: "a", Category: "work"}, {Text: "b"},
 	}}
-	todo.Sort(m.items, false)
+	todo.Sort(m.items, false, nil)
 	m = drive(m, "g")
 	m.input.SetValue("home")
 	m = drive(m, "enter")
@@ -637,6 +637,20 @@ func TestTagView(t *testing.T) {
 	m.view = viewCategory
 	if strings.Contains(ansi.Strip(m.listView()), "wire the webhook #docs") {
 		t.Fatal("tags should ride the row in the tag view only")
+	}
+}
+
+// TestResortByStatus checks the board orders rows by the configured statuses.
+func TestResortByStatus(t *testing.T) {
+	m := model{statuses: []string{"open", "in-progress", "blocked", "done"},
+		items: []todo.Item{
+			{Text: "c", Done: true},
+			{Text: "b", Status: "blocked"},
+			{Text: "a", Status: "in-progress"},
+		}}
+	m.resort()
+	if got := m.items[0].Text + m.items[1].Text + m.items[2].Text; got != "abc" {
+		t.Fatalf("resort should follow the status order, got %q", got)
 	}
 }
 
