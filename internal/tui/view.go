@@ -22,6 +22,7 @@ var (
 	cursorStyle = lipgloss.NewStyle().Background(lipgloss.AdaptiveColor{Light: "254", Dark: "236"})
 	boxStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	progStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+	blockStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	matchStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
 	catStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
 	countStyle  = lipgloss.NewStyle().Faint(true)
@@ -250,23 +251,36 @@ func (m model) labelColumn() int {
 	return col
 }
 
+// blockedStatus is the named status drawn as its own glyph, so stalled work
+// stands out from work under way.
+const blockedStatus = "blocked"
+
+// statusBox is the row's box glyph and its style: ○ open, ◐ named status,
+// ⊘ blocked, ✓ done.
+func statusBox(it todo.Item) (string, lipgloss.Style) {
+	switch {
+	case it.Done:
+		return "✓", boxStyle
+	case it.Status == blockedStatus:
+		return "⊘", blockStyle
+	case it.Status != "":
+		return "◐", progStyle
+	}
+	return "○", boxStyle
+}
+
 // rowContent renders one item's row at the given indent: the box (its shape the
-// status — ○ open, ◐ named status, ✓ done), the text, then the flush-right
-// rowLabel. Text that does not fit left of the label column wraps onto
-// continuation lines aligned under the first, so the result may hold several
-// newline-separated lines. Cursor highlight is applied by the caller.
+// status, see statusBox), the text, then the flush-right rowLabel. Text that
+// does not fit left of the label column wraps onto continuation lines aligned
+// under the first, so the result may hold several newline-separated lines.
+// Cursor highlight is applied by the caller.
 func (m model) rowContent(it todo.Item, indent, badge string, isSub bool) string {
 	w := m.width()
-	box := "○"
-	boxSt := boxStyle
+	box, boxSt := statusBox(it)
 	textSt := lipgloss.NewStyle()
 	if it.Done {
-		box = "✓"
 		textSt = doneStyle
-	} else if it.Status != "" {
-		box = "◐"
-		boxSt = progStyle
-	} else if todo.Deferred(it) {
+	} else if it.Status == "" && todo.Deferred(it) {
 		textSt = dimStyle // not started yet
 	}
 	var suffix []string
@@ -869,12 +883,7 @@ func (m model) tableView() string {
 	rows := make([]table.Row, 0, len(vis))
 	for _, r := range m.rows() {
 		it := m.rowItem(r)
-		box := "○"
-		if it.Done {
-			box = "✓"
-		} else if it.Status != "" {
-			box = "◐"
-		}
+		box, _ := statusBox(it)
 		p := " "
 		if it.Prio != 0 {
 			p = strings.ToLower(string(it.Prio))
@@ -1044,7 +1053,7 @@ func (m model) helpBody() []string {
 	line("L — set link · o — open the link in the browser")
 	line("y — copy the selected item's title to the clipboard")
 	line("space — toggle done · tab — cycle status · x — delete")
-	line("rows carry two flush-right values: subtask progress (else the due/defer label), then whichever grouping axis the headers don't already name — priority in the category and tag views, category in the priority view. The box shape is the status (○ open, ◐ named status, ✓ done)")
+	line("rows carry two flush-right values: subtask progress (else the due/defer label), then whichever grouping axis the headers don't already name — priority in the category and tag views, category in the priority view. The box shape is the status (○ open, ◐ named status, ⊘ blocked, ✓ done)")
 	line("c — archive all done items · C — archive the selected item (whole items only, not subtasks)")
 	line("subtasks: completing a parent completes its subtasks; completing the last subtask completes the parent")
 	blank()

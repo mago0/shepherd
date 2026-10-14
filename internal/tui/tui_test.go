@@ -640,6 +640,41 @@ func TestTagView(t *testing.T) {
 	}
 }
 
+// TestBlockedStatusGlyph checks the blocked status has its own box glyph in the
+// list and table views, distinct from other named statuses.
+func TestBlockedStatusGlyph(t *testing.T) {
+	m := model{input: textinput.New(), note: textarea.New(), w: 60, height: 20,
+		items: []todo.Item{
+			{Text: "wait on review", Category: "work", Status: "blocked"},
+			{Text: "write the patch", Category: "work", Status: "in-progress"},
+		}}
+
+	for _, v := range []viewMode{viewCategory, viewTable} {
+		m.view = v
+		out := ansi.Strip(m.View())
+		if !strings.Contains(out, "⊘") {
+			t.Fatalf("view %s: blocked item should show as ⊘:\n%s", viewName[v], out)
+		}
+		if strings.Count(out, "◐") != 1 {
+			t.Fatalf("view %s: only the in-progress item should show as ◐:\n%s", viewName[v], out)
+		}
+	}
+
+	for _, c := range []struct {
+		it   todo.Item
+		want string
+	}{
+		{todo.Item{}, "○"},
+		{todo.Item{Status: "in-progress"}, "◐"},
+		{todo.Item{Status: "blocked"}, "⊘"},
+		{todo.Item{Done: true}, "✓"},
+	} {
+		if got, _ := statusBox(c.it); got != c.want {
+			t.Fatalf("statusBox(%+v) = %q, want %q", c.it, got, c.want)
+		}
+	}
+}
+
 // TestRowComplement checks each view carries the axis its headers don't show:
 // the category view shows priority on the right, the priority view the category.
 func TestRowComplement(t *testing.T) {

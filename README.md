@@ -117,7 +117,7 @@ has subtasks, else the due/defer label — then, pinned far right, whichever
 grouping axis the headers *don't* already name. The category view shows the
 priority there, the priority view shows the category, and the tag view shows the
 priority. Status needs no width at all: the box shape carries it (`○` open,
-`◐` a named status, `✓` done).
+`◐` a named status, `⊘` the status `blocked`, `✓` done).
 
 **Inline quick-add** — `a`, then one line:
 `deploy api @work #api !h due:tomorrow defer:1w link:https://…`. `@word` sets
@@ -424,7 +424,7 @@ hidefooter = false                         # true starts with the footer help gr
 - `density` — `comfort` adds outer padding and blank lines between rows.
 - `autosave` — idle seconds before an unsaved board is written to disk (default 60); `0` disables it, so only `w` and quit save.
 - `categories` — press `tab` in the category prompt (`g`) to cycle through them.
-- `statuses` — ordered list `tab` cycles through in the list; `done` is always kept and forced last. Defaults to `["open", "done"]`. Intermediate statuses persist as a `status:` line and show a `◐` glyph; [`shepherd stats`](#stats) breaks items down by status in this order.
+- `statuses` — ordered list `tab` cycles through in the list; `done` is always kept and forced last. Defaults to `["open", "done"]`. Intermediate statuses persist as a `status:` line and show a `◐` glyph (`blocked` shows a red `⊘`); [`shepherd stats`](#stats) breaks items down by status in this order.
 - `hidefooter` — start with the footer help grid hidden for a cleaner board (the `jwarykowski/shepherd` · version line stays); `F` toggles it at runtime.
 
 Edit these in the running board with `,` (settings): `enter` cycles `view`/`density`/`footer` and edits `autosave`/`categories`/`statuses`, and each change is written straight back to `config.toml`. shepherd owns the file — a settings save rewrites the managed keys.
