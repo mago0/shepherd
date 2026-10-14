@@ -89,9 +89,20 @@ func less(a, b Item, byPrio bool, statuses []string) bool {
 
 // Sort orders items: overdue pinned first, then soonest due. The middle keys
 // are category, status, priority, or priority, status, category when byPrio
-// (the priority view). statuses is the configured order, "done" last.
+// (the priority view). statuses is the configured order, "done" last. Each
+// item's subtasks are ordered too.
 func Sort(items []Item, byPrio bool, statuses []string) {
 	sort.SliceStable(items, func(i, j int) bool { return less(items[i], items[j], byPrio, statuses) })
+	sortSubs(items, statuses)
+}
+
+// sortSubs orders each item's subtasks by the shared order. Subtasks share
+// their parent's category, so status, priority and due decide.
+func sortSubs(items []Item, statuses []string) {
+	for i := range items {
+		subs := items[i].Subs
+		sort.SliceStable(subs, func(a, b int) bool { return less(subs[a], subs[b], false, statuses) })
+	}
 }
 
 // SortByTag orders items by their grouping tag (untagged last), then by the
@@ -104,6 +115,7 @@ func SortByTag(items []Item, statuses []string) {
 		}
 		return less(items[i], items[j], false, statuses)
 	})
+	sortSubs(items, statuses)
 }
 
 // SortBySource orders items by Source first (the global board view), then by
@@ -115,4 +127,5 @@ func SortBySource(items []Item, statuses []string) {
 		}
 		return less(items[i], items[j], false, statuses)
 	})
+	sortSubs(items, statuses)
 }

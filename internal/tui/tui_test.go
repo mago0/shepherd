@@ -318,23 +318,37 @@ func TestSubtasks(t *testing.T) {
 		t.Fatalf("want 3 rows, got %d", got)
 	}
 
-	// navigate onto the first sub, toggle it: parent stays open
+	sub := func(text string) todo.Item {
+		for _, s := range m.items[0].Subs {
+			if s.Text == text {
+				return s
+			}
+		}
+		t.Fatalf("no subtask %q", text)
+		return todo.Item{}
+	}
+
+	// navigate onto the first sub, toggle it: parent stays open, the done sub
+	// sorts below the open one and the cursor follows it
 	m = drive(m, "j", " ")
-	if !m.items[0].Subs[0].Done {
+	if !sub("step one").Done {
 		t.Fatal("space did not toggle the subtask")
 	}
 	if m.items[0].Done {
 		t.Fatal("parent went done with one sub still open")
 	}
-	// toggle the last sub: parent auto-completes
-	m = drive(m, "j", " ")
+	if got := m.rowItem(m.selRef()).Text; got != "step one" {
+		t.Fatalf("cursor did not follow the toggled subtask, on %q", got)
+	}
+	// toggle the other sub, now above the cursor: parent auto-completes
+	m = drive(m, "k", " ")
 	if !m.items[0].Done {
 		t.Fatalf("all subs done should complete parent: %+v", m.items[0])
 	}
 
 	// undo restores the prior sub state (deep-copy snapshot, not shared slice)
 	m = drive(m, "U")
-	if m.items[0].Done || m.items[0].Subs[1].Done {
+	if m.items[0].Done || sub("step two").Done {
 		t.Fatalf("undo did not restore sub state: %+v", m.items[0])
 	}
 
@@ -651,6 +665,18 @@ func TestResortByStatus(t *testing.T) {
 	m.resort()
 	if got := m.items[0].Text + m.items[1].Text + m.items[2].Text; got != "abc" {
 		t.Fatalf("resort should follow the status order, got %q", got)
+	}
+
+	// a status change re-sorts at once and the cursor follows the row
+	m = model{input: textinput.New(), note: textarea.New(), w: 60, height: 20,
+		statuses: []string{"open", "in-progress", "done"},
+		items:    []todo.Item{{Text: "first"}, {Text: "second"}}}
+	m = drive(m, "tab")
+	if m.items[0].Text != "second" {
+		t.Fatalf("in-progress item should sort below the open one: %+v", m.items)
+	}
+	if got := m.rowItem(m.selRef()).Text; got != "first" {
+		t.Fatalf("cursor did not follow the cycled item, on %q", got)
 	}
 }
 
